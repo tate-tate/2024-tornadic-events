@@ -1,0 +1,439 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tornadic Events Visualization</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+    <style>
+        /* Global Styles */
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Inter', sans-serif;
+        }
+
+        html, body {
+            width: 100%;
+            height: 100%;
+            scroll-behavior: smooth;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        .row {
+            display: flex;
+            justify-content: space-between;
+            margin: 20px 0;
+            align-items: flex-start;
+        }
+
+        .chart {
+            flex: 1;
+            margin-right: 20px;
+        }
+
+        .stats-box {
+            flex: 1;
+            background-color: #f8f9fa;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            padding: 20px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .stats-box h2 {
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+
+        .stats-box p {
+            margin: 5px 0;
+            font-size: 14px;
+        }
+
+        .dark-mode .stats-box {
+            background-color: #343a40;
+            color: #f8f9fa;
+            border-color: #6c757d;
+        }
+
+        .tooltip {
+            position: absolute;
+            background-color: #495057;
+            color: #f8f9fa;
+            border: 1px solid #6c757d;
+            border-radius: 5px;
+            padding: 10px;
+            font-size: 12px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+
+        #tornadoShape {
+            width: 100%;
+            height: 700px;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .tornado-dot {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background-color: #333333;
+            border-radius: 50%;
+            opacity: 0.8;
+        }
+
+        #map {
+            width: 100%;
+            height: 800px;
+            background-color: var(--map-bg);
+            border: 1px solid var(--map-border);
+            border-radius: 5px;
+            padding: 10px;
+        }
+
+        #tornadoNotes h3 {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #333;
+        }
+
+        #tornadoNotes p {
+            margin: 5px 0;
+            font-size: 14px;
+            line-height: 1.5;
+            color: #555;
+        }
+
+        .dark-mode #tornadoNotes h3 {
+            color: #f8f9fa;
+        }
+
+        .dark-mode #tornadoNotes p {
+            color: #ddd;
+        }
+
+        #filters {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Tornadic Events in 2024</h1>
+
+        <!-- Tornado Shape and Notes -->
+        <div class="row">
+            <div id="tornadoStats" class="stats-box">
+                <h2>2024 Tornado Notes</h2>
+                <button id="toggleMode" class="btn">Toggle Light/Dark Mode</button>
+                <div id="tornadoNotes">
+                    <h3>Overview</h3>
+                    <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit. Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.</p>
+                    <h3>Details</h3>
+                    <p>Ut enim ad minim veniam, quis nostrud exercitation ullamco laboris nisi ut aliquip ex ea commodo consequat.</p>
+                </div>
+            </div>
+            <div id="tornadoShape" class="chart"></div>
+        </div>
+        
+        <!-- Map, Dropdowns, and State-Specific Statistics -->
+        <div class="row">
+            <div id="map" class="chart"></div>
+            <div id="stateStats" class="stats-box">
+                <h2>State-Specific Statistics</h2>
+                <p id="stateName">State: </p>
+                <p id="stateTornadoes">Total Tornadoes: </p>
+                <p id="stateAverageEFScale">Average EF Scale: </p>
+                <p id="stateStrongestTornado">Strongest Tornado: </p>
+                <p id="stateInjuries">Total Injuries: </p>
+                <p id="stateDeaths">Total Deaths: </p>
+                <div id="filters">
+                    <label for="tornadoStrength">Tornado Strength:</label>
+                    <select id="tornadoStrength">
+                        <option value="all">All</option>
+                        <option value="1">EF1</option>
+                        <option value="2">EF2</option>
+                        <option value="3">EF3</option>
+                        <option value="4">EF4</option>
+                        <option value="5">EF5</option>
+                    </select>
+                    <br><br>
+                    <label for="stateSelect">Select a State:</label>
+                    <select id="stateSelect">
+                        <option value="all">All States</option>
+                        <!-- State options will be dynamically populated -->
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="tooltip" id="tooltip"></div>
+    </div>
+
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            let data; // Declare `data` in a higher scope
+            let currentStrengthFilter = "all"; // Track the current tornado strength filter
+
+            // Light/Dark Mode Toggle
+            const toggleModeButton = document.getElementById("toggleMode");
+            toggleModeButton.addEventListener("click", () => {
+                document.body.classList.toggle("dark-mode");
+            });
+
+            // Define the color scale for strengths
+            const colorScale = d3.scaleOrdinal()
+                .domain([1, 2, 3, 4, 5])
+                .range(["#4FEB00", "#D7EA00", "#EBA600", "#EA4700", "#EB0101"]);
+
+            const width = 1200;
+            const height = 800;
+            const svg = d3.select("#map")
+                .append("svg")
+                .attr("width", width)
+                .attr("height", height);
+
+            const projection = d3.geoAlbersUsa().scale(1500).translate([width / 2, height / 2]);
+            const path = d3.geoPath().projection(projection);
+
+            const mapGroup = svg.append("g");
+
+            const zoom = d3.zoom()
+                .scaleExtent([1, 8])
+                .on("zoom", (event) => {
+                    mapGroup.attr("transform", event.transform);
+                });
+
+            svg.call(zoom);
+
+            d3.csv("data/2024weatherdata.csv").then(csvData => {
+                data = csvData.filter(d => {
+                    d.TOR_F_SCALE = d.TOR_F_SCALE ? +d.TOR_F_SCALE.replace("EF", "") : null;
+                    d.INJURIES_DIRECT = +d.INJURIES_DIRECT || 0;
+                    d.INJURIES_INDIRECT = +d.INJURIES_INDIRECT || 0;
+                    d.DEATHS_DIRECT = +d.DEATHS_DIRECT || 0;
+                    d.DEATHS_INDIRECT = +d.DEATHS_INDIRECT || 0;
+                    d.TOTAL_INJURIES = d.INJURIES_DIRECT + d.INJURIES_INDIRECT;
+                    d.TOTAL_DEATHS = d.DEATHS_DIRECT + d.DEATHS_INDIRECT;
+                    return d.TOR_F_SCALE > 0;
+                });
+
+                data.forEach(d => {
+                    d.BEGIN_LAT = +d.BEGIN_LAT;
+                    d.BEGIN_LON = +d.BEGIN_LON;
+                });
+
+                // Update state-specific statistics for all data
+                updateStateStats(data, "all");
+
+                // Create the tornado shape
+                createTornadoShape(data);
+
+                // Add event listener for scroll to animate dots to the map
+                window.addEventListener("scroll", () => {
+                    const tornadoShape = document.getElementById("tornadoShape");
+                    const rect = tornadoShape.getBoundingClientRect();
+
+                    if (rect.bottom < window.innerHeight) {
+                        animateDotsToMap(data, projection);
+                    }
+                });
+
+                d3.json("data/us-states.json").then(us => {
+                    const stateNames = us.features.map(d => d.properties.NAME).sort();
+                    const stateSelect = d3.select("#stateSelect");
+
+                    stateSelect.selectAll("option")
+                        .data(stateNames)
+                        .enter()
+                        .append("option")
+                        .attr("value", d => d)
+                        .text(d => d);
+
+                    mapGroup.selectAll("path")
+                        .data(us.features)
+                        .enter()
+                        .append("path")
+                        .attr("d", path)
+                        .attr("fill", "#EAEAEA")
+                        .attr("stroke", "#333");
+
+                    // Add event listener for state dropdown
+                    document.getElementById("stateSelect").addEventListener("change", function () {
+                        const selectedState = this.value;
+
+                        let filteredData = data;
+
+                        if (selectedState !== "all") {
+                            const stateFeature = us.features.find(d => d.properties.NAME.toLowerCase() === selectedState.toLowerCase());
+                            if (stateFeature) {
+                                const [[x0, y0], [x1, y1]] = path.bounds(stateFeature);
+                                const dx = x1 - x0;
+                                const dy = y1 - y0;
+                                const x = (x0 + x1) / 2;
+                                const y = (y0 + y1) / 2;
+                                const scale = Math.min(8, 0.9 / Math.max(dx / width, dy / height));
+                                const translate = [width / 2 - scale * x, height / 2 - scale * y];
+
+                                svg.transition().duration(1000).call(
+                                    zoom.transform,
+                                    d3.zoomIdentity.translate(translate[0], translate[1]).scale(scale)
+                                );
+
+                                filteredData = filteredData.filter(d => d.STATE.toLowerCase() === selectedState.toLowerCase());
+                            }
+                        } else {
+                            svg.transition().duration(1000).call(zoom.transform, d3.zoomIdentity);
+                        }
+
+                        if (currentStrengthFilter !== "all") {
+                            filteredData = filteredData.filter(d => d.TOR_F_SCALE === +currentStrengthFilter);
+                        }
+
+                        updateStateStats(filteredData, selectedState);
+                        updateMap(filteredData);
+                    });
+
+                    // Add event listener for tornado strength dropdown
+                    document.getElementById("tornadoStrength").addEventListener("change", function () {
+                        currentStrengthFilter = this.value;
+
+                        let filteredData = data;
+
+                        if (currentStrengthFilter !== "all") {
+                            filteredData = filteredData.filter(d => d.TOR_F_SCALE === +currentStrengthFilter);
+                        }
+
+                        const selectedState = document.getElementById("stateSelect").value;
+                        if (selectedState !== "all") {
+                            filteredData = filteredData.filter(d => d.STATE.toLowerCase() === selectedState.toLowerCase());
+                        }
+
+                        updateStateStats(filteredData, selectedState);
+                        updateMap(filteredData);
+                    });
+                });
+            });
+
+            function createTornadoShape(data) {
+                const tornadoContainer = d3.select("#tornadoShape");
+
+                const width = tornadoContainer.node().offsetWidth;
+                const height = tornadoContainer.node().offsetHeight;
+
+                tornadoContainer.selectAll(".tornado-dot")
+                    .data(data)
+                    .enter()
+                    .append("div")
+                    .attr("class", "tornado-dot")
+                    .style("left", (d, i) => {
+                        const level = i / data.length;
+                        const maxWidthAtLevel = width * 0.6 * (1 - level);
+                        return `${(width / 2) - (maxWidthAtLevel / 2) + Math.random() * maxWidthAtLevel}px`;
+                    })
+                    .style("top", (d, i) => `${(i / data.length) * height}px`)
+                    .style("opacity", 0.8);
+            }
+
+            function animateDotsToMap(data, projection) {
+                const tornadoDots = d3.selectAll(".tornado-dot");
+
+                // Get the bounding boxes of the tornadoShape and map
+                const tornadoShapeBounds = document.getElementById("tornadoShape").getBoundingClientRect();
+                const mapBounds = document.getElementById("map").getBoundingClientRect();
+
+                // Animate each dot to its corresponding geographic position on the map
+                tornadoDots.transition()
+                    .duration(2000)
+                    .style("left", d => {
+                        const coords = projection([d.BEGIN_LON, d.BEGIN_LAT]);
+                        return coords ? `${coords[0] + mapBounds.left - tornadoShapeBounds.left}px` : "0px";
+                    })
+                    .style("top", d => {
+                        const coords = projection([d.BEGIN_LON, d.BEGIN_LAT]);
+                        return coords ? `${coords[1] + mapBounds.top - tornadoShapeBounds.top}px` : "0px";
+                    })
+                    .style("opacity", 0) // Fade out as they move
+                    .on("end", function () {
+                        d3.select(this).remove(); // Remove the dot after animation
+                    });
+
+                // Draw the dots on the map after animation
+                updateMap(data);
+            }
+
+            function updateMap(data) {
+                mapGroup.selectAll("circle").remove();
+
+                mapGroup.selectAll("circle")
+                    .data(data)
+                    .enter()
+                    .append("circle")
+                    .attr("cx", d => {
+                        const coords = projection([d.BEGIN_LON, d.BEGIN_LAT]);
+                        return coords ? coords[0] : null;
+                    })
+                    .attr("cy", d => {
+                        const coords = projection([d.BEGIN_LON, d.BEGIN_LAT]);
+                        return coords ? coords[1] : null;
+                    })
+                    .attr("r", 2)
+                    .attr("fill", d => colorScale(d.TOR_F_SCALE))
+                    .attr("opacity", 0.6)
+                    .on("mouseover", (event, d) => {
+                        d3.select("#tooltip")
+                            .style("opacity", 1)
+                            .style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`)
+                            .html(`
+                                <strong>EF Scale:</strong> EF${d.TOR_F_SCALE}<br>
+                                <strong>Latitude:</strong> ${d.BEGIN_LAT}<br>
+                                <strong>Longitude:</strong> ${d.BEGIN_LON}<br>
+                                <strong>Injuries:</strong> ${d.TOTAL_INJURIES}<br>
+                                <strong>Deaths:</strong> ${d.TOTAL_DEATHS}
+                            `);
+                    })
+                    .on("mousemove", (event) => {
+                        d3.select("#tooltip")
+                            .style("left", `${event.pageX + 10}px`)
+                            .style("top", `${event.pageY + 10}px`);
+                    })
+                    .on("mouseout", () => {
+                        d3.select("#tooltip")
+                            .style("opacity", 0);
+                    });
+            }
+
+            function updateStateStats(data, state) {
+                const totalTornadoes = data.length;
+                const totalInjuries = data.reduce((sum, d) => sum + d.TOTAL_INJURIES, 0);
+                const totalDeaths = data.reduce((sum, d) => sum + d.TOTAL_DEATHS, 0);
+                const averageEFScale = totalTornadoes > 0
+                    ? (data.reduce((sum, d) => sum + d.TOR_F_SCALE, 0) / totalTornadoes).toFixed(2)
+                    : "N/A";
+                const strongestTornado = totalTornadoes > 0
+                    ? Math.max(...data.map(d => d.TOR_F_SCALE))
+                    : "N/A";
+
+                d3.select("#stateName").text(`State: ${state === "all" ? "All States" : state}`);
+                d3.select("#stateTornadoes").text(`Total Tornadoes: ${totalTornadoes}`);
+                d3.select("#stateAverageEFScale").text(`Average EF Scale: ${averageEFScale}`);
+                d3.select("#stateStrongestTornado").text(`Strongest Tornado: ${strongestTornado === "N/A" ? "N/A" : `EF${strongestTornado}`}`);
+                d3.select("#stateInjuries").text(`Total Injuries: ${totalInjuries}`);
+                d3.select("#stateDeaths").text(`Total Deaths: ${totalDeaths}`);
+            }
+        });
+    </script>
+</body>
+</html>
