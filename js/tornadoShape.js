@@ -1,5 +1,5 @@
-import * as d3 from "d3";
 import { projection } from './map.js'; // Import projection from map.js
+import * as d3 from "d3";
 console.log('Projection in tornadoShape.js:', projection);
 export function createTornadoShape(data) {
     const tornadoContainer = d3.select("#tornadoShape");

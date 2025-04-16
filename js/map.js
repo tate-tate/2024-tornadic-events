@@ -1,4 +1,4 @@
-// filepath: js/map.js
+import * as d3 from "d3";
 export const projection = d3.geoAlbersUsa().scale(1500).translate([600, 400]);
 console.log('Projection in map.js:', projection);
 export function createMap(us, data, currentStrengthFilter) {

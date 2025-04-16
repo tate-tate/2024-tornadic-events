@@ -1,4 +1,4 @@
-// filepath: js/tooltip.js
+import * as d3 from "d3";
 export function initializeTooltip() {
     const tooltip = d3.select("#tooltip");
 

@@ -1,4 +1,5 @@
-// filepath: js/stateStats.js
+import * as d3 from "d3";
+
 export function updateStateStats(data, state) {
     const totalTornadoes = data.length;
     const totalInjuries = data.reduce((sum, d) => sum + d.TOTAL_INJURIES, 0);

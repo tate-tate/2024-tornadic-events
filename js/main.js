@@ -3,6 +3,8 @@ import { createMap, projection } from './map.js'; // Import projection
 import { createTornadoShape, animateDotsToMap } from './tornadoShape.js';
 import { updateStateStats } from './stateStats.js';
 import { initializeTooltip } from './tooltip.js';
+import * as d3 from "d3";
+
 
 document.addEventListener("DOMContentLoaded", () => {
     let data;

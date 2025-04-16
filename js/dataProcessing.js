@@ -1,4 +1,4 @@
-// filepath: js/dataProcessing.js
+import * as d3 from "d3";
 export function processData(csvData) {
     return csvData.filter(d => {
         d.TOR_F_SCALE = d.TOR_F_SCALE ? +d.TOR_F_SCALE.replace("EF", "") : null;
